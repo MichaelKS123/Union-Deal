@@ -1,0 +1,346 @@
+<!--
+Project: UnionDeal — Great Prices, UK-Wide Delivery
+A simple portfolio e-commerce site built with HTML, CSS, JavaScript and PHP.
+
+Files included in this single export. Copy each section into the indicated file paths.
+-->
+
+=== File: public/index.html ===
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UnionDeal: Great Prices, UK-Wide Delivery</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <h1 class="logo">UnionDeal</h1>
+      <p class="tag">Great Prices — UK‑Wide Delivery</p>
+      <nav>
+        <input id="search" class="search" placeholder="Search products..." />
+        <a class="cart-link" href="/public/cart.php">Cart (<span id="cart-count">0</span>)</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>Welcome to UnionDeal</h2>
+      <p>Curated deals across electronics, home, fashion and more. Fast delivery across the UK.</p>
+    </section>
+
+```
+<section>
+  <h3>Featured Products</h3>
+  <div id="products" class="product-grid"></div>
+</section>
+```
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <small>© 2025 UnionDeal — Great Prices, UK‑Wide Delivery</small>
+    </div>
+  </footer>
+
+  <script src="/assets/js/app.js"></script>
+
+</body>
+</html>
+
+=== File: public/cart.php ===
+
+<?php
+session_start();
+require_once __DIR__ . '/../api/products.php';
+$products = get_products();
+$cart = isset($_SESSION['cart']) ? $_SESSION['cart'] : [];
+
+function render_cart_row($id, $qty, $products) {
+    $p = $products[$id];
+    $subtotal = $p['price'] * $qty;
+    return "<tr>\n<td>\n<img src=\"{$p['image']}\" alt=\"{htmlspecialchars($p['title'])}\" class=\"thumb\">\n</td>\n<td>".htmlspecialchars($p['title'])."</td>\n<td>£".number_format($p['price'],2)."</td>\n<td><form method=\"post\" action=\"/api/cart.php\"><input type=\"hidden\" name=\"action\" value=\"update\"><input type=\"hidden\" name=\"id\" value=\"$id\"><input class=\"qty\" name=\"qty\" value=\"$qty\"></form></td>\n<td>£".number_format($subtotal,2)."</td>\n<td><form method=\"post\" action=\"/api/cart.php\"><input type=\"hidden\" name=\"action\" value=\"remove\"><input type=\"hidden\" name=\"id\" value=\"$id\"><button type=\"submit\">Remove</button></form></td>\n</tr>";
+}
+
+$grand = 0.0;
+?>
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cart — UnionDeal</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <h1 class="logo">UnionDeal</h1>
+      <a href="/public/index.html">Home</a>
+    </div>
+  </header>
+  <main class="container">
+    <h2>Your Cart</h2>
+    <?php if (empty($cart)): ?>
+      <p>Your cart is empty. <a href="/public/index.html">Shop now</a></p>
+    <?php else: ?>
+      <form method="post" action="/public/checkout.php">
+      <table class="cart">
+        <thead><tr><th></th><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($cart as $id => $qty): ?>
+          <?php echo render_cart_row($id, $qty, $products); $grand += $products[$id]['price'] * $qty; ?>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+      <p class="total">Total: <strong>£<?php echo number_format($grand,2); ?></strong></p>
+
+```
+  <h3>Checkout</h3>
+  <label>Full name<br><input name="name" required></label>
+  <label>Address<br><textarea name="address" required></textarea></label>
+  <label>Email<br><input type="email" name="email" required></label>
+  <button type="submit">Place Order</button>
+  </form>
+<?php endif; ?>
+```
+
+  </main>
+</body>
+</html>
+
+=== File: public/checkout.php ===
+
+<?php
+session_start();
+require_once __DIR__ . '/../api/products.php';
+$products = get_products();
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: /public/cart.php');
+    exit;
+}
+$name = strip_tags($_POST['name'] ?? '');
+$address = strip_tags($_POST['address'] ?? '');
+$email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL) ? $_POST['email'] : '';
+$cart = $_SESSION['cart'] ?? [];
+if (empty($cart) || !$name || !$address || !$email) {
+    $_SESSION['message'] = 'Please fill details and ensure cart is not empty.';
+    header('Location: /public/cart.php');
+    exit;
+}
+
+$items = [];
+$total = 0;
+foreach ($cart as $id => $qty) {
+    if (!isset($products[$id])) continue;
+    $items[] = ['id'=>$id,'title'=>$products[$id]['title'],'qty'=>$qty,'price'=>$products[$id]['price']];
+    $total += $products[$id]['price'] * $qty;
+}
+
+$order = [
+    'date' => date('c'),
+    'name' => $name,
+    'address' => $address,
+    'email' => $email,
+    'items' => $items,
+    'total' => $total
+];
+
+file_put_contents(__DIR__ . '/../data/orders.txt', json_encode($order) . PHP_EOL, FILE_APPEND | LOCK_EX);
+
+// clear cart
+unset($_SESSION['cart']);
+?>
+
+<!doctype html>
+
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Order Confirmed — UnionDeal</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+<header class="site-header"><div class="container"><h1 class="logo">UnionDeal</h1></div></header>
+<main class="container">
+  <h2>Thank you, <?php echo htmlspecialchars($name); ?>!</h2>
+  <p>Your order has been placed. We'll email a receipt to <?php echo htmlspecialchars($email); ?>.</p>
+  <p><a href="/public/index.html">Continue shopping</a></p>
+</main>
+</body>
+</html>
+
+=== File: api/products.php ===
+
+<?php
+function get_products() {
+    // In a real app products would come from a database.
+    return [
+        'p1' => ['id'=>'p1','title'=>'Wireless Headphones','price'=>49.99,'image'=>'/assets/images/headphones.jpg','category'=>'electronics','desc'=>'Comfortable over-ear wireless headphones.'],
+        'p2' => ['id'=>'p2','title'=>'Smart Lamp','price'=>29.50,'image'=>'/assets/images/lamp.jpg','category'=>'home','desc'=>'Dimmable smart lamp with touch control.'],
+        'p3' => ['id'=>'p3','title'=>'Men\'s Jacket','price'=>79.00,'image'=>'/assets/images/jacket.jpg','category'=>'fashion','desc'=>'Warm waterproof jacket.'],
+        'p4' => ['id'=>'p4','title'=>'Travel Mug','price'=>12.99,'image'=>'/assets/images/mug.jpg','category'=>'home','desc'=>'Insulated stainless steel travel mug.'],
+        'p5' => ['id'=>'p5','title'=>'Bluetooth Speaker','price'=>39.99,'image'=>'/assets/images/speaker.jpg','category'=>'electronics','desc'=>'Compact outdoor speaker.']
+    ];
+}
+
+=== File: api/cart.php ===
+<?php
+session_start();
+require_once __DIR__ . '/products.php';
+$products = get_products();
+
+$method = $_SERVER['REQUEST_METHOD'];
+if ($method === 'POST') {
+    $action = $_POST['action'] ?? '';
+    $id = $_POST['id'] ?? '';
+    if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
+    switch ($action) {
+        case 'add':
+            if (!$id || !isset($products[$id])) { http_response_code(400); echo json_encode(['error'=>'invalid product']); exit; }
+            $_SESSION['cart'][$id] = ($_SESSION['cart'][$id] ?? 0) + 1;
+            echo json_encode(['status'=>'ok','count'=>array_sum($_SESSION['cart'])]);
+            break;
+        case 'remove':
+            if ($id && isset($_SESSION['cart'][$id])) unset($_SESSION['cart'][$id]);
+            header('Location: /public/cart.php');
+            break;
+        case 'update':
+            $qty = max(0, intval($_POST['qty'] ?? 0));
+            if ($qty === 0) unset($_SESSION['cart'][$id]); else $_SESSION['cart'][$id] = $qty;
+            header('Location: /public/cart.php');
+            break;
+        default:
+            http_response_code(400); echo json_encode(['error'=>'unknown action']);
+    }
+    exit;
+}
+
+// GET - return cart summary
+$cart = $_SESSION['cart'] ?? [];
+$items = [];
+$total = 0;
+foreach ($cart as $id => $qty) {
+    if (!isset($products[$id])) continue;
+    $items[] = ['id'=>$id,'title'=>$products[$id]['title'],'qty'=>$qty,'price'=>$products[$id]['price']];
+    $total += $products[$id]['price'] * $qty;
+}
+header('Content-Type: application/json');
+echo json_encode(['items'=>$items,'total'=>$total,'count'=>array_sum($cart)]);
+
+=== File: assets/css/style.css ===
+:root{--brand:#0072ce;--accent:#ffb400;--bg:#f6f7fb}
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;margin:0;background:var(--bg);color:#111}
+.container{max-width:1100px;margin:0 auto;padding:1rem}
+.site-header{background:#fff;border-bottom:1px solid #e6e6e6}
+.header-inner{display:flex;align-items:center;gap:1rem;justify-content:space-between}
+.logo{margin:0;color:var(--brand)}
+.tag{margin:0;color:#666;font-size:.9rem}
+.search{padding:.5rem;border:1px solid #ddd;border-radius:6px}
+.cart-link{background:var(--brand);color:white;padding:.5rem .8rem;border-radius:6px;text-decoration:none}
+.hero{background:white;padding:1.5rem;margin:1rem 0;border-radius:8px}
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}
+.card{background:white;padding:1rem;border-radius:8px;border:1px solid #eaeaea;display:flex;flex-direction:column}
+.card img{width:100%;height:140px;object-fit:cover;border-radius:6px}
+.card h4{margin:.5rem 0}
+.card p{flex:1;color:#555}
+.card .price{font-weight:700;margin-top:.5rem}
+.card button{background:var(--accent);border:0;padding:.6rem;border-radius:6px;cursor:pointer}
+.thumb{width:60px;height:60px;object-fit:cover}
+.cart{width:100%;border-collapse:collapse}
+.cart th,.cart td{padding:.5rem;border-bottom:1px solid #eee;text-align:left}
+.qty{width:48px}
+.total{text-align:right;font-size:1.1rem}
+.site-footer{padding:1rem;text-align:center;color:#777;margin-top:2rem}
+
+=== File: assets/js/app.js ===
+(async function(){
+  const productsWrap = document.getElementById('products');
+  const cartCount = document.getElementById('cart-count');
+  const search = document.getElementById('search');
+
+  async function fetchProducts(){
+    const res = await fetch('/api/products.php');
+    // products.php returns nothing for GET; instead we fetch via API file (we included only PHP function). We'll fetch from a small endpoint below.
+    // For demo: use a lightweight inline array via fetch from a tiny JSON endpoint. But since we don't have that, we'll request /api/products.php?raw to trigger PHP to print JSON.
+    try{
+      const r = await fetch('/api/products_json.php');
+      const data = await r.json();
+      return Object.values(data);
+    }catch(e){
+      // fallback hardcoded list matching server
+      return [
+        {id:'p1',title:'Wireless Headphones',price:49.99,image:'/assets/images/headphones.jpg',desc:'Comfortable over-ear wireless headphones.'},
+        {id:'p2',title:'Smart Lamp',price:29.5,image:'/assets/images/lamp.jpg',desc:'Dimmable smart lamp with touch control.'},
+        {id:'p3',title:"Men's Jacket",price:79.0,image:'/assets/images/jacket.jpg',desc:'Warm waterproof jacket.'},
+        {id:'p4',title:'Travel Mug',price:12.99,image:'/assets/images/mug.jpg',desc:'Insulated stainless steel travel mug.'},
+        {id:'p5',title:'Bluetooth Speaker',price:39.99,image:'/assets/images/speaker.jpg',desc:'Compact outdoor speaker.'}
+      ];
+    }
+  }
+
+  function render(products){
+    productsWrap.innerHTML = '';
+    for(const p of products){
+      const el = document.createElement('div'); el.className='card';
+      el.innerHTML = `<img src="${p.image}" alt="${escapeHtml(p.title)}"><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.desc)}</p><div class="price">£${p.price.toFixed(2)}</div><button data-id="${p.id}">Add to cart</button>`;
+      productsWrap.appendChild(el);
+    }
+    document.querySelectorAll('button[data-id]').forEach(b=>b.addEventListener('click', addToCart));
+  }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>\"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+  async function addToCart(e){
+    const id = e.currentTarget.dataset.id;
+    const res = await fetch('/api/cart.php',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`action=add&id=${encodeURIComponent(id)}`});
+    const data = await res.json();
+    if (data && data.count !== undefined) cartCount.textContent = data.count;
+    e.currentTarget.textContent = 'Added';
+    setTimeout(()=>e.currentTarget.textContent='Add to cart',800);
+  }
+
+  function initSearch(products){
+    search.addEventListener('input', ()=>{
+      const q = search.value.trim().toLowerCase();
+      const filtered = products.filter(p=>p.title.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q));
+      render(filtered);
+    });
+  }
+
+  const products = await fetchProducts();
+  render(products);
+  initSearch(products);
+
+  // get cart count
+  try{ const r = await fetch('/api/cart.php'); const c = await r.json(); cartCount.textContent = c.count || 0; }catch(e){cartCount.textContent=0}
+})();
+
+=== File: api/products_json.php ===
+<?php
+require_once __DIR__ . '/products.php';
+header('Content-Type: application/json');
+echo json_encode(get_products());
+
+=== File: assets/images/README ===
+Place your demo images in the folder `assets/images/` with the following filenames:
+- headphones.jpg
+- lamp.jpg
+- jacket.jpg
+- mug.jpg
+- speaker.jpg
+
+(Use royalty-free placeholder images for your portfolio.)
+
+=== File: data/README ===
+Create the `data/` directory (writeable by the web server). The orders will be appended to `data/orders.txt` as JSON lines.
